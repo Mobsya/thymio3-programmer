@@ -1,0 +1,23 @@
+{
+  "name": "thymio3-web-programmer",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "dev:https": "HTTPS=1 vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "preview:https": "HTTPS=1 vite preview"
+  },
+  "dependencies": {
+    "esptool-js": "^0.6.1"
+  },
+  "devDependencies": {
+    "@types/w3c-web-serial": "^1.0.8",
+    "@types/w3c-web-usb": "^1.0.13",
+    "@vitejs/plugin-basic-ssl": "^2.3.0",
+    "typescript": "~5.8.3",
+    "vite": "^6.3.5"
+  }
+}

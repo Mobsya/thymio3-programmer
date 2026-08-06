@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Thymio3 Web Programmer</title>
+    <link rel="stylesheet" href="/src/styles.css" />
+  </head>
+  <body>
+    <div id="app">
+      <header class="app-header">
+        <h1>Thymio3 Web Programmer</h1>
+        <p class="subtitle">
+          Program STM32 and ESP32 firmwares from Chrome via USB.
+          Requires a secure context (HTTPS or localhost).
+        </p>
+        <p id="browserWarning" class="warning hidden"></p>
+      </header>
+
+      <nav class="tabs" role="tablist" aria-label="Programming operations">
+        <button type="button" class="tab active" data-tab="stm32" role="tab" aria-selected="true">
+          STM32 firmware
+        </button>
+        <button type="button" class="tab" data-tab="esp32" role="tab" aria-selected="false">
+          ESP32 firmware
+        </button>
+        <button type="button" class="tab" data-tab="id" role="tab" aria-selected="false">
+          Thymio3 ID
+        </button>
+      </nav>
+
+      <main>
+        <section id="panel-stm32" class="panel active" role="tabpanel" data-tab="stm32"></section>
+        <section id="panel-esp32" class="panel" role="tabpanel" data-tab="esp32" hidden></section>
+        <section id="panel-id" class="panel" role="tabpanel" data-tab="id" hidden></section>
+      </main>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
