@@ -23,29 +23,13 @@ async function resetEsp32ViaRts(transport: Transport, log: LogFn): Promise<void>
   log("Reset done.");
 }
 
-/** Open the serial port briefly and pulse RTS to reset the ESP32 (for manual test). */
-export async function resetEsp32Firmware(
-  port: SerialPort,
-  log: LogFn,
-): Promise<void> {
-  const transport = new Transport(port, true);
-  try {
-    await transport.connect(ESP_BAUDRATE);
-    await resetEsp32ViaRts(transport, log);
-  } finally {
-    try {
-      await transport.disconnect();
-    } catch {
-      // port may already be closed
-    }
-  }
-}
-
 export async function programEsp32Firmware(
   port: SerialPort,
   firmware: ArrayBuffer,
   log: LogFn,
+  options?: { dummy?: boolean },
 ): Promise<void> {
+  const dummy = options?.dummy ?? false;
   const transport = new Transport(port, true);
   const terminal = {
     clean() {
@@ -72,6 +56,16 @@ export async function programEsp32Firmware(
     log(`Connecting at ${ESP_BAUDRATE} baud…`);
     const chip = await esploader.main();
     log(`Connected to ${chip}`);
+
+    if (dummy) {
+      log(
+        `Dummy mode: skipping flash of ${firmware.byteLength} bytes (esptool-js has no dry-run); reset only.`,
+      );
+      await esploader.after("no_reset");
+      await resetEsp32ViaRts(transport, log);
+      log("Dummy run complete.");
+      return;
+    }
 
     const data = new Uint8Array(firmware);
     log(`Flashing ${firmware.byteLength} bytes at 0x${ESP_FLASH_ADDRESS.toString(16)}…`);

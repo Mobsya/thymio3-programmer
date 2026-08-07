@@ -41,6 +41,7 @@ export interface DfuDevice {
     data: ArrayBuffer,
     manifestationTolerant: boolean,
   ) => Promise<void>;
+  do_leave: (startAddress?: number) => Promise<void>;
   waitDisconnected: (timeoutMs: number) => Promise<USBDevice>;
 }
 

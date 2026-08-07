@@ -12,7 +12,7 @@ import {
   isThymio3ReadyForEspFlash,
 } from "./usb/esp32Detect";
 import { programStm32Firmware } from "./flash/stm32";
-import { programEsp32Firmware, resetEsp32Firmware } from "./flash/esp32";
+import { programEsp32Firmware } from "./flash/esp32";
 
 type FlashTab = "stm32" | "esp32";
 
@@ -69,6 +69,17 @@ function clearLog(tab: FlashTab): void {
   }
 }
 
+function isDummyMode(tab: FlashTab): boolean {
+  const el = document.querySelector<HTMLInputElement>(`#${tab}-dummy`);
+  return el?.checked ?? false;
+}
+
+function updateDummyCheckbox(tab: FlashTab): void {
+  const el = document.querySelector<HTMLInputElement>(`#${tab}-dummy`);
+  if (!el) return;
+  el.disabled = appState[tab].op === "running";
+}
+
 function updateProgramButton(tab: FlashTab): void {
   const btn = document.querySelector<HTMLButtonElement>(`#program-${tab}`);
   if (!btn) return;
@@ -83,20 +94,12 @@ function updateProgramButton(tab: FlashTab): void {
   }
   if (state.op === "running") {
     btn.disabled = true;
-    btn.textContent = "Programming…";
+    btn.textContent = isDummyMode(tab) ? "Dummy…" : "Programming…";
     return;
   }
   btn.textContent = "Program";
   btn.disabled = !canProgram(tab);
-  updateResetButton();
-}
-
-function updateResetButton(): void {
-  const btn = document.querySelector<HTMLButtonElement>("#reset-esp32");
-  if (!btn) return;
-  const state = appState.esp32;
-  // Needs a matching Thymio3 serial device; allowed even without firmware / in DONE.
-  btn.disabled = !state.devicePresent || state.op === "running";
+  updateDummyCheckbox(tab);
 }
 
 function updateAuthorizeButtons(): void {
@@ -165,6 +168,10 @@ function renderStm32Panel(root: HTMLElement): void {
     </div>
     <div class="actions">
       <button type="button" class="secondary" id="authorize-stm32">Authorize USB</button>
+      <label class="dummy-check">
+        <input type="checkbox" id="stm32-dummy" />
+        Dummy
+      </label>
       <button type="button" class="primary" id="program-stm32" disabled>Program</button>
     </div>
     <pre id="log-stm32" class="log" aria-live="polite"></pre>
@@ -186,7 +193,10 @@ function renderEsp32Panel(root: HTMLElement): void {
     </div>
     <div class="actions">
       <button type="button" class="secondary" id="authorize-esp32-serial">Authorize serial</button>
-      <button type="button" class="secondary" id="reset-esp32" disabled>Reset ESP32</button>
+      <label class="dummy-check">
+        <input type="checkbox" id="esp32-dummy" />
+        Dummy
+      </label>
       <button type="button" class="primary" id="program-esp32" disabled>Program</button>
     </div>
     <pre id="log-esp32" class="log" aria-live="polite"></pre>
@@ -215,6 +225,7 @@ function formatDuration(ms: number): string {
 
 async function onProgramStm32(): Promise<void> {
   const state = appState.stm32;
+  const dummy = isDummyMode("stm32");
   if (!canProgram("stm32") || !state.firmware.data) return;
 
   let device = stm32Device;
@@ -234,20 +245,32 @@ async function onProgramStm32(): Promise<void> {
   updateProgramButton("stm32");
   updateTabLockUI();
   clearLog("stm32");
-  appendLog("stm32", "Starting STM32 DFU programming…");
+  appendLog(
+    "stm32",
+    dummy ? "Starting STM32 dummy run (DFU connect only)…" : "Starting STM32 DFU programming…",
+  );
   const startedAt = performance.now();
 
   try {
-    await programStm32Firmware(device, state.firmware.data, (line) =>
-      appendLog("stm32", line),
-    );
+    await programStm32Firmware(device, state.firmware.data, (line) => appendLog("stm32", line), {
+      dummy,
+    });
     const elapsed = formatDuration(performance.now() - startedAt);
-    state.op = "done";
-    appendLog("stm32", `Programming time: ${elapsed}`);
-    appendLog(
-      "stm32",
-      "DONE — STM32 will leave DFU after reset. You can switch to ESP32/ID now; Program stays DONE until a new DFU device is connected.",
-    );
+    if (dummy) {
+      state.op = "done";
+      appendLog("stm32", `Dummy run time: ${elapsed}`);
+      appendLog(
+        "stm32",
+        "DONE — STM32 left DFU (:leave). You can switch to ESP32/ID now; Program stays DONE until a new DFU device is connected.",
+      );
+    } else {
+      state.op = "done";
+      appendLog("stm32", `Programming time: ${elapsed}`);
+      appendLog(
+        "stm32",
+        "DONE — STM32 will leave DFU after reset. You can switch to ESP32/ID now; Program stays DONE until a new DFU device is connected.",
+      );
+    }
   } catch (err) {
     const elapsed = formatDuration(performance.now() - startedAt);
     state.op = "idle";
@@ -261,6 +284,7 @@ async function onProgramStm32(): Promise<void> {
 
 async function onProgramEsp32(): Promise<void> {
   const state = appState.esp32;
+  const dummy = isDummyMode("esp32");
   if (!canProgram("esp32") || !state.firmware.data) return;
 
   let port = esp32Port;
@@ -277,17 +301,25 @@ async function onProgramEsp32(): Promise<void> {
   updateProgramButton("esp32");
   updateTabLockUI();
   clearLog("esp32");
-  appendLog("esp32", "Starting ESP32 programming…");
+  appendLog("esp32", dummy ? "Starting ESP32 dummy run (connect + reset only)…" : "Starting ESP32 programming…");
   const startedAt = performance.now();
 
   try {
-    await programEsp32Firmware(port, state.firmware.data, (line) =>
-      appendLog("esp32", line),
+    await programEsp32Firmware(
+      port,
+      state.firmware.data,
+      (line) => appendLog("esp32", line),
+      { dummy },
     );
     const elapsed = formatDuration(performance.now() - startedAt);
-    state.op = "done";
-    appendLog("esp32", `Programming time: ${elapsed}`);
-    appendLog("esp32", "DONE — wait until the device disappears before programming again.");
+    if (dummy) {
+      state.op = "done";
+      appendLog("esp32", `Dummy run time: ${elapsed}`);
+    } else {
+      state.op = "done";
+      appendLog("esp32", `Programming time: ${elapsed}`);
+      appendLog("esp32", "DONE — wait until the device disappears before programming again.");
+    }
   } catch (err) {
     const elapsed = formatDuration(performance.now() - startedAt);
     state.op = "idle";
@@ -296,33 +328,6 @@ async function onProgramEsp32(): Promise<void> {
   } finally {
     updateProgramButton("esp32");
     updateTabLockUI();
-  }
-}
-
-async function onResetEsp32(): Promise<void> {
-  const state = appState.esp32;
-  if (!state.devicePresent || state.op === "running") return;
-
-  let port = esp32Port;
-  if (!port) {
-    port = await requestThymio3Port();
-    if (!port) {
-      appendLog("esp32", "No Thymio3 serial port selected.");
-      return;
-    }
-    esp32Port = port;
-  }
-
-  const btn = document.querySelector<HTMLButtonElement>("#reset-esp32");
-  if (btn) btn.disabled = true;
-  appendLog("esp32", "Manual ESP32 reset…");
-  try {
-    await resetEsp32Firmware(port, (line) => appendLog("esp32", line));
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    appendLog("esp32", `Reset error: ${message}`);
-  } finally {
-    updateResetButton();
   }
 }
 
@@ -436,10 +441,11 @@ export async function initApp(): Promise<void> {
   document.getElementById("program-esp32")?.addEventListener("click", () => {
     void onProgramEsp32();
   });
-  document.getElementById("reset-esp32")?.addEventListener("click", () => {
-    void onResetEsp32();
-  });
-  updateResetButton();
+  for (const tab of ["stm32", "esp32"] as const) {
+    document.getElementById(`${tab}-dummy`)?.addEventListener("change", () => {
+      updateProgramButton(tab);
+    });
+  }
 
   watchStm32Devices((present, label, device) => {
     const prev = appState.stm32.devicePresent;

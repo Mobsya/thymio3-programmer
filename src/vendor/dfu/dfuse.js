@@ -278,6 +278,49 @@ export const dfuse = {};
         }
     }
 
+    /**
+     * DfuSe "leave" — same as dfu-util -s 0x08000000:leave without flashing.
+     * SET_ADDRESS then zero-length DNLOAD on block 2 jumps to firmware and resets.
+     */
+    dfuse.Device.prototype.do_leave = async function(startAddress) {
+        if (isNaN(startAddress)) {
+            if (!this.memoryInfo || !this.memoryInfo.segments) {
+                throw "No memory map available";
+            }
+            startAddress = this.memoryInfo.segments[0].start;
+            this.logWarning("Using inferred start address 0x" + startAddress.toString(16));
+        } else if (this.getSegment(startAddress) === null) {
+            this.logWarning(`Start address 0x${startAddress.toString(16)} outside of memory map bounds`);
+        }
+
+        this.logInfo(`Leaving DFU mode (jump to 0x${startAddress.toString(16)})`);
+
+        let state = await this.getState();
+        if (state != dfu.dfuIDLE) {
+            await this.abortToIdle();
+        }
+
+        try {
+            await this.dfuseCommand(dfuse.SET_ADDRESS, startAddress, 4);
+            await this.download(new ArrayBuffer(), 2);
+        } catch (error) {
+            const msg = String(error);
+            if (msg.includes("Device unavailable") ||
+                msg.includes("device was disconnected") ||
+                msg.includes("NotFoundError")) {
+                this.logDebug("Leave complete (device reset/disconnected as expected)");
+                return;
+            }
+            throw "Error during DfuSe leave: " + error;
+        }
+
+        try {
+            await this.poll_until(s => (s == dfu.dfuMANIFEST || s == dfu.dfuMANIFEST_WAIT_RESET));
+        } catch (error) {
+            this.logDebug("Leave status poll: " + error);
+        }
+    }
+
     dfuse.Device.prototype.do_upload = async function(xfer_size, max_size) {
         let startAddress = this.startAddress;
         if (isNaN(startAddress)) {

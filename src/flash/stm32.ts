@@ -69,7 +69,9 @@ export async function programStm32Firmware(
   usbDevice: USBDevice,
   firmware: ArrayBuffer,
   log: LogFn,
+  options?: { dummy?: boolean },
 ): Promise<void> {
+  const dummy = options?.dummy ?? false;
   if (!isStm32DfuDevice(usbDevice)) {
     throw new Error("Selected USB device is not the expected STM32 DFU bootloader.");
   }
@@ -120,6 +122,17 @@ export async function programStm32Firmware(
     if (device.memoryInfo?.segments?.[0]) {
       device.startAddress = device.memoryInfo.segments[0].start;
       log(`Memory: ${device.memoryInfo.name}, start 0x${device.startAddress.toString(16)}`);
+    }
+
+    if (dummy) {
+      const leaveAddress = device.startAddress ?? device.memoryInfo?.segments?.[0]?.start;
+      log(
+        `Dummy mode: skipping flash of ${firmware.byteLength} bytes (transfer size ${desc.transferSize}); DFU verify only.`,
+      );
+      log(`Leave: DfuSe :leave at 0x${(leaveAddress ?? 0x08000000).toString(16)}…`);
+      await device.do_leave(leaveAddress);
+      log("Dummy run complete.");
+      return;
     }
 
     log(`Writing ${firmware.byteLength} bytes (transfer size ${desc.transferSize})…`);
