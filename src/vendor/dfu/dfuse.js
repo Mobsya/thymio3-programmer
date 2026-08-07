@@ -263,26 +263,11 @@ export const dfuse = {};
         }
         this.logInfo(`Wrote ${bytes_sent} bytes`);
 
-        this.logInfo("Manifesting new firmware");
-        try {
-            await this.dfuseCommand(dfuse.SET_ADDRESS, startAddress, 4);
-            await this.download(new ArrayBuffer(), 0);
-        } catch (error) {
-            throw "Error during DfuSe manifestation: " + error;
-        }
-
-        try {
-            await this.poll_until(state => (state == dfu.dfuMANIFEST));
-        } catch (error) {
-            this.logError(error);
-        }
+        this.logInfo("Leaving DFU mode (:leave)");
+        await this._dfuseLeaveAt(startAddress, { ensureIdle: false });
     }
 
-    /**
-     * DfuSe "leave" — same as dfu-util -s 0x08000000:leave without flashing.
-     * SET_ADDRESS then zero-length DNLOAD on block 2 jumps to firmware and resets.
-     */
-    dfuse.Device.prototype.do_leave = async function(startAddress) {
+    dfuse.Device.prototype._resolveLeaveAddress = function(startAddress) {
         if (isNaN(startAddress)) {
             if (!this.memoryInfo || !this.memoryInfo.segments) {
                 throw "No memory map available";
@@ -292,12 +277,20 @@ export const dfuse = {};
         } else if (this.getSegment(startAddress) === null) {
             this.logWarning(`Start address 0x${startAddress.toString(16)} outside of memory map bounds`);
         }
+        return startAddress;
+    };
+
+    dfuse.Device.prototype._dfuseLeaveAt = async function(startAddress, options) {
+        const ensureIdle = options?.ensureIdle ?? true;
+        startAddress = this._resolveLeaveAddress(startAddress);
 
         this.logInfo(`Leaving DFU mode (jump to 0x${startAddress.toString(16)})`);
 
-        let state = await this.getState();
-        if (state != dfu.dfuIDLE) {
-            await this.abortToIdle();
+        if (ensureIdle) {
+            let state = await this.getState();
+            if (state != dfu.dfuIDLE) {
+                await this.abortToIdle();
+            }
         }
 
         try {
@@ -319,6 +312,14 @@ export const dfuse = {};
         } catch (error) {
             this.logDebug("Leave status poll: " + error);
         }
+    };
+
+    /**
+     * DfuSe "leave" — same as dfu-util -s 0x08000000:leave without flashing.
+     * SET_ADDRESS then zero-length DNLOAD on block 2 jumps to firmware and resets.
+     */
+    dfuse.Device.prototype.do_leave = async function(startAddress) {
+        await this._dfuseLeaveAt(startAddress, { ensureIdle: true });
     }
 
     dfuse.Device.prototype.do_upload = async function(xfer_size, max_size) {

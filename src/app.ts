@@ -268,7 +268,7 @@ async function onProgramStm32(): Promise<void> {
       appendLog("stm32", `Programming time: ${elapsed}`);
       appendLog(
         "stm32",
-        "DONE — STM32 will leave DFU after reset. You can switch to ESP32/ID now; Program stays DONE until a new DFU device is connected.",
+        "DONE — STM32 left DFU (:leave). You can switch to ESP32/ID now; Program stays DONE until a new DFU device is connected.",
       );
     }
   } catch (err) {
