@@ -16,27 +16,56 @@ import { programEsp32Firmware, resetEsp32Firmware } from "./flash/esp32";
 
 type FlashTab = "stm32" | "esp32";
 
+const LOG_BOTTOM_THRESHOLD_PX = 24;
+
 let stm32Device: USBDevice | null = null;
 let esp32Port: SerialPort | null = null;
+
+/** Auto-scroll each console only while the user is at (or returns to) the bottom. */
+const logStickToBottom: Record<FlashTab, boolean> = {
+  stm32: true,
+  esp32: true,
+};
 
 const tabButtons = () =>
   Array.from(document.querySelectorAll<HTMLButtonElement>(".tab"));
 const panels = () => Array.from(document.querySelectorAll<HTMLElement>(".panel"));
+
+function isLogNearBottom(el: HTMLElement): boolean {
+  return el.scrollHeight - el.scrollTop - el.clientHeight <= LOG_BOTTOM_THRESHOLD_PX;
+}
+
+function bindLogScroll(tab: FlashTab): void {
+  const el = document.querySelector<HTMLElement>(`#log-${tab}`);
+  if (!el || el.dataset.scrollBound === "1") return;
+  el.dataset.scrollBound = "1";
+  el.addEventListener("scroll", () => {
+    logStickToBottom[tab] = isLogNearBottom(el);
+  });
+}
 
 function appendLog(tab: FlashTab, line: string): void {
   const state = appState[tab];
   state.log = state.log ? `${state.log}\n${line}` : line;
   const el = document.querySelector<HTMLElement>(`#log-${tab}`);
   if (el) {
+    const stick = logStickToBottom[tab];
     el.textContent = state.log;
-    el.scrollTop = el.scrollHeight;
+    if (stick) {
+      el.scrollTop = el.scrollHeight;
+      logStickToBottom[tab] = true;
+    }
   }
 }
 
 function clearLog(tab: FlashTab): void {
   appState[tab].log = "";
+  logStickToBottom[tab] = true;
   const el = document.querySelector<HTMLElement>(`#log-${tab}`);
-  if (el) el.textContent = "";
+  if (el) {
+    el.textContent = "";
+    el.scrollTop = 0;
+  }
 }
 
 function updateProgramButton(tab: FlashTab): void {
@@ -302,6 +331,8 @@ export async function initApp(): Promise<void> {
   renderStm32Panel(document.getElementById("panel-stm32")!);
   renderEsp32Panel(document.getElementById("panel-esp32")!);
   renderIdPanel(document.getElementById("panel-id")!);
+  bindLogScroll("stm32");
+  bindLogScroll("esp32");
 
   await mountFirmwarePicker({
     kind: "stm32",
