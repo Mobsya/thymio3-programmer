@@ -8,8 +8,8 @@ import {
 } from "./usb/stm32Detect";
 import {
   requestThymio3Port,
-  requestThymio3UsbDevice,
   watchEsp32Devices,
+  isThymio3ReadyForEspFlash,
 } from "./usb/esp32Detect";
 import { programStm32Firmware } from "./flash/stm32";
 import { programEsp32Firmware, resetEsp32Firmware } from "./flash/esp32";
@@ -20,6 +20,7 @@ const LOG_BOTTOM_THRESHOLD_PX = 24;
 
 let stm32Device: USBDevice | null = null;
 let esp32Port: SerialPort | null = null;
+let esp32SerialAuthorized = false;
 
 /** Auto-scroll each console only while the user is at (or returns to) the bottom. */
 const logStickToBottom: Record<FlashTab, boolean> = {
@@ -98,6 +99,19 @@ function updateResetButton(): void {
   btn.disabled = !state.devicePresent || state.op === "running";
 }
 
+function updateAuthorizeButtons(): void {
+  const stm32Auth = document.getElementById("authorize-stm32");
+  if (stm32Auth) {
+    // Needed for a new/unrecognized DFU device; hide while a matching one is present.
+    stm32Auth.hidden = appState.stm32.devicePresent;
+  }
+
+  const espSerial = document.getElementById("authorize-esp32-serial");
+  if (espSerial) {
+    espSerial.hidden = esp32SerialAuthorized;
+  }
+}
+
 function updateDeviceStatus(tab: FlashTab): void {
   const el = document.querySelector<HTMLElement>(`#device-${tab}`);
   if (!el) return;
@@ -105,6 +119,7 @@ function updateDeviceStatus(tab: FlashTab): void {
   el.textContent = state.deviceLabel;
   el.classList.toggle("ok", state.devicePresent);
   updateProgramButton(tab);
+  updateAuthorizeButtons();
 }
 
 function updateTabLockUI(): void {
@@ -161,7 +176,8 @@ function renderEsp32Panel(root: HTMLElement): void {
     <h2>ESP32 firmware</h2>
     <p class="lead">
       Requires STM32 already programmed (USB-serial bridge). Select a
-      <code>FULL-ESP32-*.bin</code> image, authorize USB + serial, then Program at 115200 baud / address 0x0.
+      <code>FULL-ESP32-*.bin</code> image, authorize the Thymio3 serial port
+      (USB <code>0xFFFF:0xFFFF</code>), then Program at 115200 baud / address 0x0.
       After flashing, RTS is pulsed to reset the ESP32 via STM32 <code>ESP32_ENABLE</code>.
     </p>
     <div id="fw-esp32"></div>
@@ -169,7 +185,6 @@ function renderEsp32Panel(root: HTMLElement): void {
       <div id="device-esp32" class="device-status">${appState.esp32.deviceLabel}</div>
     </div>
     <div class="actions">
-      <button type="button" class="secondary" id="authorize-esp32-usb">Authorize USB</button>
       <button type="button" class="secondary" id="authorize-esp32-serial">Authorize serial</button>
       <button type="button" class="secondary" id="reset-esp32" disabled>Reset ESP32</button>
       <button type="button" class="primary" id="program-esp32" disabled>Program</button>
@@ -229,7 +244,10 @@ async function onProgramStm32(): Promise<void> {
     const elapsed = formatDuration(performance.now() - startedAt);
     state.op = "done";
     appendLog("stm32", `Programming time: ${elapsed}`);
-    appendLog("stm32", "DONE — leave device connected until it disappears, then you can program again.");
+    appendLog(
+      "stm32",
+      "DONE — STM32 will leave DFU after reset. You can switch to ESP32/ID now; Program stays DONE until a new DFU device is connected.",
+    );
   } catch (err) {
     const elapsed = formatDuration(performance.now() - startedAt);
     state.op = "idle";
@@ -308,6 +326,20 @@ async function onResetEsp32(): Promise<void> {
   }
 }
 
+async function refreshEsp32Presence(): Promise<void> {
+  const status = await isThymio3ReadyForEspFlash();
+  const prev = appState.esp32.devicePresent;
+  esp32SerialAuthorized = status.port !== null;
+  esp32Port = status.port;
+  appState.esp32.devicePresent = status.present;
+  appState.esp32.deviceLabel = status.label;
+  if (appState.esp32.op === "done" && prev && !status.present) {
+    appState.esp32.op = "idle";
+    appendLog("esp32", "Device disappeared — ready for a new operation.");
+  }
+  updateDeviceStatus("esp32");
+}
+
 export async function initApp(): Promise<void> {
   const buildEl = document.getElementById("appBuild");
   if (buildEl) {
@@ -375,28 +407,11 @@ export async function initApp(): Promise<void> {
       stm32Device = device;
       appState.stm32.devicePresent = true;
       appState.stm32.deviceLabel = describeStm32Device(device);
-      if (appState.stm32.op === "done") {
-        // still done until disappear — authorization alone shouldn't clear DONE
-      }
       updateDeviceStatus("stm32");
       appendLog("stm32", `Authorized: ${appState.stm32.deviceLabel}`);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       appendLog("stm32", `Authorize failed: ${message}`);
-    }
-  });
-
-  document.getElementById("authorize-esp32-usb")?.addEventListener("click", async () => {
-    try {
-      const device = await requestThymio3UsbDevice();
-      if (!device) {
-        appendLog("esp32", "No matching Thymio3 USB device (need Mobsya, bcd 0x0200).");
-        return;
-      }
-      appendLog("esp32", `USB authorized: ${device.productName || "Thymio3"}`);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      appendLog("esp32", `USB authorize failed: ${message}`);
     }
   });
 
@@ -408,6 +423,7 @@ export async function initApp(): Promise<void> {
         if (!port) return;
         esp32Port = port;
         appendLog("esp32", "Serial port authorized.");
+        await refreshEsp32Presence();
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         appendLog("esp32", `Serial authorize failed: ${message}`);
@@ -430,17 +446,29 @@ export async function initApp(): Promise<void> {
     stm32Device = device;
     appState.stm32.devicePresent = present;
     appState.stm32.deviceLabel = label;
-    if (appState.stm32.op === "done" && prev && !present) {
-      appState.stm32.op = "idle";
-      appendLog("stm32", "Device disappeared — ready for a new operation.");
+
+    if (appState.stm32.op === "done") {
+      // After flash the STM32 leaves DFU (USB ID changes). Keep DONE, but unlock
+      // other tabs. Only return to idle when a new DFU device is connected.
+      if (!prev && present) {
+        appState.stm32.op = "idle";
+        appendLog("stm32", "New STM32 DFU device connected — ready to program again.");
+      } else if (prev && !present) {
+        appendLog(
+          "stm32",
+          "STM32 left DFU mode (auto-reset). DONE — connect another DFU device to program again, or switch tab.",
+        );
+      }
     }
+
     updateDeviceStatus("stm32");
+    updateTabLockUI();
   });
 
   watchEsp32Devices((present, label, port) => {
     const prev = appState.esp32.devicePresent;
-    if (port) esp32Port = port;
-    if (!present) esp32Port = null;
+    esp32SerialAuthorized = port !== null;
+    esp32Port = port;
     appState.esp32.devicePresent = present;
     appState.esp32.deviceLabel = label;
     if (appState.esp32.op === "done" && prev && !present) {
@@ -453,4 +481,5 @@ export async function initApp(): Promise<void> {
   setActiveTab("stm32");
   updateProgramButton("stm32");
   updateProgramButton("esp32");
+  updateAuthorizeButtons();
 }

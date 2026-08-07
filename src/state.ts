@@ -47,9 +47,9 @@ export const appState: AppState = {
   esp32: emptyTabFlashState(),
 };
 
-/** True once an operation was started, until it returns to idle (including DONE). */
+/** True while a flash operation is actively running (tabs stay locked). DONE does not lock tabs. */
 export function isOperationLocked(): boolean {
-  return appState.stm32.op !== "idle" || appState.esp32.op !== "idle";
+  return appState.stm32.op === "running" || appState.esp32.op === "running";
 }
 
 export function canProgram(tab: "stm32" | "esp32"): boolean {
