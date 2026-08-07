@@ -159,6 +159,16 @@ function renderIdPanel(root: HTMLElement): void {
   `;
 }
 
+function formatDuration(ms: number): string {
+  const totalSec = ms / 1000;
+  if (totalSec < 60) {
+    return `${totalSec.toFixed(1)} s`;
+  }
+  const minutes = Math.floor(totalSec / 60);
+  const seconds = totalSec - minutes * 60;
+  return `${minutes} min ${seconds.toFixed(1)} s`;
+}
+
 async function onProgramStm32(): Promise<void> {
   const state = appState.stm32;
   if (!canProgram("stm32") || !state.firmware.data) return;
@@ -181,17 +191,21 @@ async function onProgramStm32(): Promise<void> {
   updateTabLockUI();
   clearLog("stm32");
   appendLog("stm32", "Starting STM32 DFU programming…");
+  const startedAt = performance.now();
 
   try {
     await programStm32Firmware(device, state.firmware.data, (line) =>
       appendLog("stm32", line),
     );
+    const elapsed = formatDuration(performance.now() - startedAt);
     state.op = "done";
+    appendLog("stm32", `Programming time: ${elapsed}`);
     appendLog("stm32", "DONE — leave device connected until it disappears, then you can program again.");
   } catch (err) {
+    const elapsed = formatDuration(performance.now() - startedAt);
     state.op = "idle";
     const message = err instanceof Error ? err.message : String(err);
-    appendLog("stm32", `Error: ${message}`);
+    appendLog("stm32", `Error after ${elapsed}: ${message}`);
   } finally {
     updateProgramButton("stm32");
     updateTabLockUI();
@@ -217,17 +231,21 @@ async function onProgramEsp32(): Promise<void> {
   updateTabLockUI();
   clearLog("esp32");
   appendLog("esp32", "Starting ESP32 programming…");
+  const startedAt = performance.now();
 
   try {
     await programEsp32Firmware(port, state.firmware.data, (line) =>
       appendLog("esp32", line),
     );
+    const elapsed = formatDuration(performance.now() - startedAt);
     state.op = "done";
+    appendLog("esp32", `Programming time: ${elapsed}`);
     appendLog("esp32", "DONE — wait until the device disappears before programming again.");
   } catch (err) {
+    const elapsed = formatDuration(performance.now() - startedAt);
     state.op = "idle";
     const message = err instanceof Error ? err.message : String(err);
-    appendLog("esp32", `Error: ${message}`);
+    appendLog("esp32", `Error after ${elapsed}: ${message}`);
   } finally {
     updateProgramButton("esp32");
     updateTabLockUI();
@@ -262,6 +280,11 @@ async function onResetEsp32(): Promise<void> {
 }
 
 export async function initApp(): Promise<void> {
+  const buildEl = document.getElementById("appBuild");
+  if (buildEl) {
+    buildEl.textContent = `App commit ${__APP_COMMIT__} · ${__APP_COMMIT_DATE__}`;
+  }
+
   const warning = document.getElementById("browserWarning");
   if (warning) {
     if (!window.isSecureContext) {

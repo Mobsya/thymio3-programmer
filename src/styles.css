@@ -51,6 +51,13 @@ body {
   line-height: 1.45;
 }
 
+.build-info {
+  margin: 0.45rem 0 0;
+  font-family: var(--mono);
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
 .warning {
   margin-top: 0.75rem;
   padding: 0.65rem 0.8rem;
@@ -150,25 +157,26 @@ body {
 .fw-server,
 .fw-path {
   width: 100%;
+  min-height: 2.6rem;
   padding: 0.55rem 0.7rem;
   border: 1px solid var(--border);
   border-radius: 8px;
   font: inherit;
-  background: #fff;
+  font-family: var(--mono);
+  font-size: 0.85rem;
+  color: var(--muted);
+  background: #f8fafb;
+  resize: vertical;
+  word-break: break-all;
+  white-space: pre-wrap;
 }
 
 .fw-server {
   flex: 1 1 220px;
 }
 
-.fw-path {
-  font-family: var(--mono);
-  font-size: 0.85rem;
-  color: var(--muted);
-  background: #f8fafb;
-}
-
 .file-btn {
+  appearance: none;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -177,7 +185,9 @@ body {
   border: 1px solid var(--border);
   background: #eef3f7;
   cursor: pointer;
+  font: inherit;
   font-weight: 600;
+  color: var(--ink);
 }
 
 .file-btn:hover {

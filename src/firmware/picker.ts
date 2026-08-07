@@ -23,6 +23,19 @@ export function firmwarePatternHint(kind: FirmwareKind): string {
   return kind === "stm32" ? "STM32-*.bin" : "FULL-ESP32-*.bin";
 }
 
+/** Best-effort absolute/local display path for a picked File. */
+export function localFileDisplayPath(file: File): string {
+  // Electron and some Chromium hosts expose an absolute OS path.
+  if (typeof file.path === "string" && file.path.length > 0) {
+    return file.path;
+  }
+  // Directory picker / webkitdirectory relative path (includes folders).
+  if (file.webkitRelativePath) {
+    return file.webkitRelativePath;
+  }
+  return file.name;
+}
+
 export async function loadManifest(): Promise<FirmwareManifest> {
   try {
     const res = await fetch(new URL("firmware/manifest.json", document.baseURI));
@@ -68,6 +81,43 @@ export interface FirmwarePickerOptions {
   }) => void;
 }
 
+async function pickLocalFile(kind: FirmwareKind): Promise<File | null> {
+  const acceptTypes = [
+    {
+      description: `${firmwarePatternHint(kind)} firmware`,
+      accept: { "application/octet-stream": [".bin"] },
+    },
+  ];
+
+  if (typeof window.showOpenFilePicker === "function") {
+    try {
+      const [handle] = await window.showOpenFilePicker({
+        multiple: false,
+        types: acceptTypes,
+        excludeAcceptAllOption: false,
+      });
+      return handle ? await handle.getFile() : null;
+    } catch (err) {
+      // User cancelled the picker
+      if (err instanceof DOMException && err.name === "AbortError") {
+        return null;
+      }
+      throw err;
+    }
+  }
+
+  // Fallback: hidden <input type="file">
+  return new Promise((resolve) => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = ".bin,application/octet-stream";
+    input.addEventListener("change", () => {
+      resolve(input.files?.[0] ?? null);
+    });
+    input.click();
+  });
+}
+
 export async function mountFirmwarePicker(options: FirmwarePickerOptions): Promise<void> {
   const { kind, container, onChange } = options;
   const manifest = await loadManifest();
@@ -86,20 +136,17 @@ export async function mountFirmwarePicker(options: FirmwarePickerOptions): Promi
             )
             .join("")}
         </select>
-        <label class="file-btn">
-          Local file
-          <input type="file" class="fw-local" accept=".bin,application/octet-stream" hidden />
-        </label>
+        <button type="button" class="file-btn fw-local-btn">Local file</button>
       </div>
       <label class="field-label" for="fw-path-${kind}">Selected path</label>
-      <input id="fw-path-${kind}" class="fw-path" type="text" readonly placeholder="No firmware selected" value="${escapeHtml(options.initialDisplayPath || "")}" />
+      <textarea id="fw-path-${kind}" class="fw-path" readonly rows="2" placeholder="No firmware selected">${escapeHtml(options.initialDisplayPath || "")}</textarea>
       <p class="hint fw-error" hidden></p>
     </div>
   `;
 
   const serverSelect = container.querySelector<HTMLSelectElement>(".fw-server")!;
-  const localInput = container.querySelector<HTMLInputElement>(".fw-local")!;
-  const pathField = container.querySelector<HTMLInputElement>(".fw-path")!;
+  const localBtn = container.querySelector<HTMLButtonElement>(".fw-local-btn")!;
+  const pathField = container.querySelector<HTMLTextAreaElement>(".fw-path")!;
   const errorEl = container.querySelector<HTMLElement>(".fw-error")!;
 
   const showError = (msg: string | null) => {
@@ -110,6 +157,25 @@ export async function mountFirmwarePicker(options: FirmwarePickerOptions): Promi
     }
     errorEl.hidden = false;
     errorEl.textContent = msg;
+  };
+
+  const applyLocalFile = async (file: File) => {
+    if (!matchesFirmwareName(kind, file.name)) {
+      showError(`Invalid file name. Expected ${firmwarePatternHint(kind)}.`);
+      return;
+    }
+    try {
+      showError(null);
+      const data = await readLocalFirmware(file);
+      const displayPath = localFileDisplayPath(file);
+      pathField.value = displayPath;
+      serverSelect.value = "";
+      onChange({ displayPath, data, source: "local", name: file.name });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      showError(message);
+      onChange({ displayPath: "", data: null, source: null, name: null });
+    }
   };
 
   serverSelect.addEventListener("change", async () => {
@@ -127,7 +193,6 @@ export async function mountFirmwarePicker(options: FirmwarePickerOptions): Promi
       const data = await fetchFirmware(entry.url);
       const displayPath = resolveDisplayPath(entry);
       pathField.value = displayPath;
-      localInput.value = "";
       onChange({ displayPath, data, source: "server", name: entry.name });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -137,26 +202,14 @@ export async function mountFirmwarePicker(options: FirmwarePickerOptions): Promi
     }
   });
 
-  localInput.addEventListener("change", async () => {
-    const file = localInput.files?.[0];
-    if (!file) return;
-    if (!matchesFirmwareName(kind, file.name)) {
-      showError(`Invalid file name. Expected ${firmwarePatternHint(kind)}.`);
-      localInput.value = "";
-      return;
-    }
+  localBtn.addEventListener("click", async () => {
     try {
-      showError(null);
-      const data = await readLocalFirmware(file);
-      // Browsers do not expose absolute filesystem paths.
-      const displayPath = file.name;
-      pathField.value = displayPath;
-      serverSelect.value = "";
-      onChange({ displayPath, data, source: "local", name: file.name });
+      const file = await pickLocalFile(kind);
+      if (!file) return;
+      await applyLocalFile(file);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       showError(message);
-      onChange({ displayPath: "", data: null, source: null, name: null });
     }
   });
 }
