@@ -1,4 +1,4 @@
-import { appState, canProgram, isOperationLocked, type TabId } from "./state";
+import { appState, canProgram, isOperationLocked, type FirmwareSelection, type TabId } from "./state";
 import { mountFirmwarePicker } from "./firmware/picker";
 import {
   describeStm32Device,
@@ -21,6 +21,8 @@ const LOG_BOTTOM_THRESHOLD_PX = 24;
 let stm32Device: USBDevice | null = null;
 let esp32Port: SerialPort | null = null;
 let esp32SerialAuthorized = false;
+/** Firmware identity last successfully programmed on ESP32 (while op is done). */
+let esp32ProgrammedFirmwareKey: string | null = null;
 
 /** Auto-scroll each console only while the user is at (or returns to) the bottom. */
 const logStickToBottom: Record<FlashTab, boolean> = {
@@ -72,6 +74,24 @@ function clearLog(tab: FlashTab): void {
 function isDummyMode(tab: FlashTab): boolean {
   const el = document.querySelector<HTMLInputElement>(`#${tab}-dummy`);
   return el?.checked ?? false;
+}
+
+function firmwareSelectionKey(sel: FirmwareSelection): string | null {
+  if (!sel.data) return null;
+  return `${sel.source ?? ""}|${sel.name ?? ""}|${sel.displayPath}|${sel.data.byteLength}`;
+}
+
+function onEsp32FirmwareChange(sel: FirmwareSelection): void {
+  appState.esp32.firmware = sel;
+  if (
+    appState.esp32.op === "done" &&
+    sel.data &&
+    firmwareSelectionKey(sel) !== esp32ProgrammedFirmwareKey
+  ) {
+    appState.esp32.op = "idle";
+    appendLog("esp32", "New firmware selected — ready to program again.");
+  }
+  updateProgramButton("esp32");
 }
 
 function updateDummyCheckbox(tab: FlashTab): void {
@@ -314,11 +334,16 @@ async function onProgramEsp32(): Promise<void> {
     const elapsed = formatDuration(performance.now() - startedAt);
     if (dummy) {
       state.op = "done";
+      esp32ProgrammedFirmwareKey = firmwareSelectionKey(state.firmware);
       appendLog("esp32", `Dummy run time: ${elapsed}`);
     } else {
       state.op = "done";
+      esp32ProgrammedFirmwareKey = firmwareSelectionKey(state.firmware);
       appendLog("esp32", `Programming time: ${elapsed}`);
-      appendLog("esp32", "DONE — wait until the device disappears before programming again.");
+      appendLog(
+        "esp32",
+        "DONE — select another firmware or wait until the device disappears before programming again.",
+      );
     }
   } catch (err) {
     const elapsed = formatDuration(performance.now() - startedAt);
@@ -385,10 +410,7 @@ export async function initApp(): Promise<void> {
     kind: "esp32",
     container: document.getElementById("fw-esp32")!,
     initialDisplayPath: appState.esp32.firmware.displayPath,
-    onChange: (sel) => {
-      appState.esp32.firmware = sel;
-      updateProgramButton("esp32");
-    },
+    onChange: onEsp32FirmwareChange,
   });
 
   for (const btn of tabButtons()) {
