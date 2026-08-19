@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 360" role="img" aria-labelledby="title desc">
+  <title id="title">How to enter DFU mode</title>
+  <desc id="desc">Placeholder diagram. Replace this file with the final HowToEnterDFU.svg.</desc>
+  <rect width="640" height="360" rx="16" fill="#f8fafb" stroke="#d5dde5"/>
+  <text x="320" y="48" text-anchor="middle" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="22" font-weight="700" fill="#1a2330">How to enter STM32 DFU mode</text>
+  <text x="320" y="78" text-anchor="middle" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="13" fill="#5c6b7a">(Placeholder — replace with HowToEnterDFU.svg)</text>
+  <rect x="60" y="110" width="520" height="190" rx="12" fill="#ffffff" stroke="#d5dde5"/>
+  <text x="90" y="150" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="16" fill="#1a2330">1. Hold Reset (hole near right wheel, ~10 o&apos;clock)</text>
+  <text x="90" y="185" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="16" fill="#1a2330">2. Hold Power On/Off</text>
+  <text x="90" y="220" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="16" fill="#1a2330">3. Release Reset</text>
+  <text x="90" y="255" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="16" fill="#1a2330">4. Release Power — device appears as STM32 BOOTLOADER</text>
+</svg>

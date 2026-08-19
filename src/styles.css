@@ -325,3 +325,431 @@ button.secondary:disabled {
     font-size: 1.4rem;
   }
 }
+
+/* ===========================================================================
+   Thymio3 ID tab (eFuse)
+   Append to src/styles.css. Also add the three variables below to :root.
+   =========================================================================== */
+
+/* Wider shell for every tab. Appended after the original rule, so it wins;
+   cleaner is to edit max-width directly in the #app rule of styles.css. */
+#app {
+  max-width: 1600px;
+}
+
+/*
+:root {
+  --burn: #b26a00;
+  --burn-soft: #f2dfc0;
+  --sunk: #e6ebf0;
+}
+*/
+
+.id-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+  align-items: start;
+  margin-bottom: 1rem;
+}
+
+@media (max-width: 780px) {
+  .id-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.id-block {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.9rem 1rem 1rem;
+  background: #fbfcfd;
+}
+
+.id-block h3 {
+  margin: 0 0 0.85rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.id-block .actions {
+  margin-bottom: 0;
+}
+
+/* ---------- readouts ---------- */
+
+.id-readouts {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1px;
+  background: var(--border);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  margin-bottom: 1rem;
+}
+
+@media (max-width: 520px) {
+  .id-readouts {
+    grid-template-columns: 1fr;
+  }
+}
+
+.id-readout {
+  background: var(--surface);
+  padding: 0.5rem 0.65rem;
+}
+
+.id-readout .k {
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.id-readout .v {
+  font-family: var(--mono);
+  font-size: 1.05rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.id-readout .v.dim {
+  color: var(--muted);
+  font-weight: 400;
+}
+
+/* ---------- fuse map ---------- */
+
+.id-bytes {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.75rem;
+}
+
+@media (max-width: 620px) {
+  .id-bytes {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.id-byte-label {
+  font-family: var(--mono);
+  font-size: 0.65rem;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  margin-bottom: 0.25rem;
+}
+
+.id-bits {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 3px;
+}
+
+.id-bit {
+  aspect-ratio: 1 / 1.45;
+  position: relative;
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  background: var(--sunk);
+}
+
+/* burned: fuse already blown to 1, irreversible */
+.id-bit.burned {
+  background: var(--burn);
+  border-color: var(--burn);
+}
+
+/* toburn: a 0 that this write would blow to 1 */
+.id-bit.toburn {
+  background: var(--burn-soft);
+  border-color: var(--burn);
+  animation: id-bit-pulse 1.6s ease-in-out infinite;
+}
+
+/* conflict: a 1 that would have to go back to 0, impossible */
+.id-bit.conflict {
+  background: var(--danger);
+  border-color: var(--danger);
+}
+
+.id-bit.conflict::after,
+.id-swatch.conflict::after {
+  content: "";
+  position: absolute;
+  inset: 2px;
+  background: linear-gradient(45deg, transparent 44%, #fff 44%, #fff 56%, transparent 56%);
+}
+
+@keyframes id-bit-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .id-bit.toburn {
+    animation: none;
+  }
+}
+
+.id-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.9rem;
+  margin-top: 0.8rem;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.id-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.id-swatch {
+  position: relative;
+  width: 11px;
+  height: 15px;
+  flex: none;
+  border: 1px solid var(--border);
+  border-radius: 2px;
+}
+
+.id-swatch.intact {
+  background: var(--sunk);
+}
+
+.id-swatch.burned {
+  background: var(--burn);
+  border-color: var(--burn);
+}
+
+.id-swatch.toburn {
+  background: var(--burn-soft);
+  border-color: var(--burn);
+}
+
+.id-swatch.conflict {
+  background: var(--danger);
+  border-color: var(--danger);
+}
+
+/* ---------- verdict ---------- */
+
+.id-verdict {
+  margin: 1rem 0;
+  padding: 0.6rem 0.75rem;
+  border-radius: 8px;
+  border-left: 3px solid var(--muted);
+  background: var(--sunk);
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+
+.id-verdict.ok {
+  background: #ecfdf3;
+  border-left-color: var(--ok);
+  color: #08512f;
+}
+
+.id-verdict.warn {
+  background: var(--warn-bg);
+  border-left-color: var(--burn);
+  color: #6e4300;
+}
+
+.id-verdict.bad {
+  background: #fef3f2;
+  border-left-color: var(--danger);
+  color: #7a241b;
+}
+
+/* ---------- write fields ---------- */
+
+.id-fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  margin-bottom: 0.5rem;
+}
+
+.id-field {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 180px;
+}
+
+.id-field.short {
+  flex: 0 0 5.5rem;
+}
+
+.id-field .field-label {
+  color: var(--muted);
+  font-size: 0.7rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.id-field input {
+  width: 100%;
+  min-height: 2.4rem;
+  padding: 0.45rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font: inherit;
+  font-family: var(--mono);
+  font-size: 0.9rem;
+  color: var(--ink);
+  background: #fff;
+}
+
+.id-field input:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.id-manual {
+  margin-bottom: 0.5rem;
+  color: var(--ink);
+}
+
+.id-field input:disabled {
+  color: var(--muted);
+  background: var(--sunk);
+  cursor: not-allowed;
+}
+
+.id-warning {
+  margin: 0.9rem 0 0.4rem;
+  color: var(--danger);
+  font-size: clamp(1rem, 1.4vw, 1.15rem);
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+
+.id-note {
+  margin: 0.5rem 0 0.9rem;
+  font-size: 0.78rem;
+  line-height: 1.45;
+  color: var(--muted);
+}
+
+.id-note code {
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  background: var(--sunk);
+  padding: 0.05rem 0.25rem;
+  border-radius: 3px;
+}
+
+/* ---------- destructive action ---------- */
+
+button.secondary.danger {
+  color: var(--danger);
+  border-color: #f0c6c2;
+}
+
+button.secondary.danger:hover:not(:disabled) {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: #fff;
+}
+
+/* ---------- label barcode ---------- */
+
+.id-scan {
+  margin-bottom: 0.9rem;
+  padding-bottom: 0.9rem;
+  border-bottom: 1px dashed var(--border);
+}
+
+.id-scan-row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: stretch;
+}
+
+.id-scan-value {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  min-width: 0;
+  min-height: 2.6rem;
+  padding: 0.45rem 0.6rem;
+  border: 2px solid var(--border);
+  border-radius: 8px;
+  background: #fff;
+  font-family: var(--mono);
+  font-size: 0.95rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  overflow-wrap: anywhere;
+}
+
+.id-scan-value.dim {
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.id-scan-value.ok {
+  border-color: #abefc6;
+  background: #ecfdf3;
+  color: #08512f;
+}
+
+/* prototype lot (@L): accepted, but visually distinct from a production unit */
+.id-scan-value.ok.prototype {
+  border-color: var(--warn-border);
+  background: var(--warn-bg);
+  color: #6e4300;
+}
+
+.id-scan-value.ok.prototype::after {
+  content: "PROTOTYPE";
+  margin-left: auto;
+  padding-left: 0.6rem;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  color: var(--burn);
+}
+
+.id-scan-value.error {
+  border-color: #f0c6c2;
+  background: #fef3f2;
+  color: var(--danger);
+}
+
+.id-scan-row button {
+  flex: 0 0 auto;
+}
+
+.id-scan-hint {
+  margin: 0.4rem 0 0;
+  font-size: 0.78rem;
+  line-height: 1.45;
+  color: var(--muted);
+}
+
+.id-scan-hint.ok {
+  color: var(--ok);
+}
+
+.id-scan-hint.error {
+  color: var(--danger);
+  font-weight: 600;
+}

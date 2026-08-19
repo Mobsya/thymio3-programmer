@@ -13,6 +13,8 @@ import {
 } from "./usb/esp32Detect";
 import { programStm32Firmware } from "./flash/stm32";
 import { programEsp32Firmware } from "./flash/esp32";
+import { mountIdPanel, type IdPanelHandle } from "./efuse/panel";
+import howToEnterDfuUrl from "./assets/HowToEnterDFU.svg";
 
 type FlashTab = "stm32" | "esp32";
 
@@ -23,11 +25,18 @@ let esp32Port: SerialPort | null = null;
 let esp32SerialAuthorized = false;
 /** Firmware identity last successfully programmed on ESP32 (while op is done). */
 let esp32ProgrammedFirmwareKey: string | null = null;
+let idPanel: IdPanelHandle | null = null;
+/**
+ * Teardown of the eFuse session started by a tab switch. The ESP32 tab shares
+ * the same serial port, so it waits for this before opening it.
+ */
+let idSessionClosing: Promise<void> | null = null;
 
 /** Auto-scroll each console only while the user is at (or returns to) the bottom. */
-const logStickToBottom: Record<FlashTab, boolean> = {
+const logStickToBottom: Record<TabId, boolean> = {
   stm32: true,
   esp32: true,
+  id: true,
 };
 
 const tabButtons = () =>
@@ -38,7 +47,7 @@ function isLogNearBottom(el: HTMLElement): boolean {
   return el.scrollHeight - el.scrollTop - el.clientHeight <= LOG_BOTTOM_THRESHOLD_PX;
 }
 
-function bindLogScroll(tab: FlashTab): void {
+function bindLogScroll(tab: TabId): void {
   const el = document.querySelector<HTMLElement>(`#log-${tab}`);
   if (!el || el.dataset.scrollBound === "1") return;
   el.dataset.scrollBound = "1";
@@ -47,7 +56,7 @@ function bindLogScroll(tab: FlashTab): void {
   });
 }
 
-function appendLog(tab: FlashTab, line: string): void {
+function appendLog(tab: TabId, line: string): void {
   const state = appState[tab];
   state.log = state.log ? `${state.log}\n${line}` : line;
   const el = document.querySelector<HTMLElement>(`#log-${tab}`);
@@ -61,7 +70,7 @@ function appendLog(tab: FlashTab, line: string): void {
   }
 }
 
-function clearLog(tab: FlashTab): void {
+function clearLog(tab: TabId): void {
   appState[tab].log = "";
   logStickToBottom[tab] = true;
   const el = document.querySelector<HTMLElement>(`#log-${tab}`);
@@ -161,6 +170,15 @@ function setActiveTab(tab: TabId): void {
   if (isOperationLocked() && tab !== appState.activeTab) {
     return;
   }
+  if (appState.activeTab === "id" && tab !== "id") {
+    // Leaving the ID tab releases the serial port. Fire and forget here (the
+    // teardown is guarded and cannot hang), but keep the promise so a flash
+    // started right after can wait for the port to be really free.
+    idSessionClosing = idPanel?.closeSession() ?? null;
+  }
+  // The barcode reader types like a keyboard: it must only be listened to while
+  // the ID tab is on screen.
+  idPanel?.setActive(tab === "id");
   appState.activeTab = tab;
   for (const btn of tabButtons()) {
     const active = btn.dataset.tab === tab;
@@ -181,7 +199,7 @@ function renderStm32Panel(root: HTMLElement): void {
     <p class="lead">
       Put Thymio3 in DFU mode, select an <code>STM32-*.bin</code> firmware, then Program.
     </p>
-    <img class="howto" src="./assets/HowToEnterDFU.svg" alt="How to enter STM32 DFU mode on Thymio3" />
+    <img class="howto" src="${howToEnterDfuUrl}" alt="How to enter STM32 DFU mode on Thymio3" />
     <div id="fw-stm32"></div>
     <div class="device-row">
       <div id="device-stm32" class="device-status">${appState.stm32.deviceLabel}</div>
@@ -223,14 +241,16 @@ function renderEsp32Panel(root: HTMLElement): void {
   `;
 }
 
-function renderIdPanel(root: HTMLElement): void {
-  root.innerHTML = `
-    <h2>Thymio3 ID</h2>
-    <div class="placeholder">
-      <p>Thymio3 ID programming will be defined later.</p>
-      <p>This tab is reserved for eFuse / identity programming in a future release.</p>
-    </div>
-  `;
+function mountIdTab(root: HTMLElement): void {
+  idPanel = mountIdPanel({
+    container: root,
+    log: (line) => appendLog("id", line),
+    clearLog: () => clearLog("id"),
+    onSessionChange: (session) => {
+      appState.id.session = session;
+    },
+  });
+  bindLogScroll("id");
 }
 
 function formatDuration(ms: number): string {
@@ -306,6 +326,13 @@ async function onProgramEsp32(): Promise<void> {
   const state = appState.esp32;
   const dummy = isDummyMode("esp32");
   if (!canProgram("esp32") || !state.firmware.data) return;
+
+  if (idSessionClosing) {
+    const pending = idSessionClosing;
+    idSessionClosing = null;
+    appendLog("esp32", "Waiting for the ID tab to release the serial port…");
+    await pending;
+  }
 
   let port = esp32Port;
   if (!port) {
@@ -392,7 +419,7 @@ export async function initApp(): Promise<void> {
 
   renderStm32Panel(document.getElementById("panel-stm32")!);
   renderEsp32Panel(document.getElementById("panel-esp32")!);
-  renderIdPanel(document.getElementById("panel-id")!);
+  mountIdTab(document.getElementById("panel-id")!);
   bindLogScroll("stm32");
   bindLogScroll("esp32");
 
@@ -504,6 +531,11 @@ export async function initApp(): Promise<void> {
       appendLog("esp32", "Device disappeared — ready for a new operation.");
     }
     updateDeviceStatus("esp32");
+
+    // The ID tab drives the same USB-CDC bridge, so it reuses this watcher.
+    appState.id.devicePresent = present;
+    appState.id.deviceLabel = label;
+    idPanel?.setDevice(present, label);
   });
 
   setActiveTab("stm32");
