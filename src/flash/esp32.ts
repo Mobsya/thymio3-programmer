@@ -1,7 +1,18 @@
 import { ESPLoader, Transport, type FlashOptions, type LoaderOptions } from "esptool-js";
 import type { LogFn } from "./stm32";
 
-export const ESP_BAUDRATE = 115200;
+/**
+ * Speed used for the whole session, ROM handshake included.
+ *
+ * esptool-js keeps its ROM speed in a private `romBaudrate` field that defaults
+ * to 115200 and cannot be set through LoaderOptions. When it differs from
+ * `baudrate`, `main()` calls `changeBaud()` right after uploading the stub, and
+ * that closes and reopens the serial port. On Thymio3 a reopen is a reset:
+ * Chrome asserts RTS on open and RTS drives ESP32_ENABLE, so the freshly
+ * uploaded stub would be wiped before the first flash block. Running the ROM
+ * handshake at the target speed instead keeps the port open from start to end.
+ */
+export const ESP_BAUDRATE = 460800;
 export const ESP_FLASH_ADDRESS = 0x0;
 
 function sleep(ms: number): Promise<void> {
@@ -51,6 +62,10 @@ export async function programEsp32Firmware(
   } as LoaderOptions;
 
   const esploader = new ESPLoader(loaderOptions);
+  // Match the private ROM speed to the target speed so esptool-js skips its
+  // mid-session close/reopen. See the ESP_BAUDRATE comment for why that matters
+  // on this board.
+  (esploader as unknown as { romBaudrate: number }).romBaudrate = ESP_BAUDRATE;
 
   try {
     log(`Connecting at ${ESP_BAUDRATE} baud…`);
