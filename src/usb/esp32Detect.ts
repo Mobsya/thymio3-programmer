@@ -1,5 +1,5 @@
 export const THYMIO3_VID = 0x0617;
-export const THYMIO3_PID = 0xffff;
+export const THYMIO3_PID = 0x000D;
 
 export function serialFilters(): SerialPortFilter[] {
   return [{ usbVendorId: THYMIO3_VID, usbProductId: THYMIO3_PID }];
@@ -52,7 +52,7 @@ export async function isThymio3ReadyForEspFlash(): Promise<{
   }
   return {
     present: false,
-    label: "No Thymio3 serial device (USB 0x0617:0xFFFF)",
+    label: "No Thymio3 serial device (USB 0x0617:0x000D)",
     port: null,
   };
 }

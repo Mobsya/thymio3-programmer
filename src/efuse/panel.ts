@@ -454,7 +454,7 @@ export function mountIdPanel(options: IdPanelOptions): IdPanelHandle {
   }
 
   async function reboot(): Promise<void> {
-    if (!window.confirm("Reboot the robot? Production mode is left behind.")) return;
+    //if (!window.confirm("Reboot the robot? Production mode is left behind.")) return;
     await run(async () => {
       if (!session) return;
       try {
@@ -618,13 +618,14 @@ function renderMarkup(root: HTMLElement): void {
       NUMBER is from 0 to 65535. <br/>
     </p>
     <div class="device-row">
-      <div id="device-id" class="device-status">No Thymio3 serial device (USB 0x0617:0xFFFF)</div>
+      <div id="device-id" class="device-status">No Thymio3 serial device (USB 0x0617:0x000D)</div>
       <div id="id-session" class="device-status">port closed</div>
     </div>
     <div class="actions">
       <button type="button" class="secondary" id="authorize-id-serial">Authorize serial</button>
       <button type="button" class="primary" id="id-connect" disabled>Connect robot</button>
       <button type="button" class="secondary" id="id-disconnect" disabled>Close</button>
+      <button type="button" class="secondary" id="id-reboot" disabled>Reboot robot</button>
     </div>
 
     <div class="id-grid">
@@ -705,8 +706,7 @@ function renderMarkup(root: HTMLElement): void {
 
     <pre id="log-id" class="log" aria-live="polite"></pre>
     <div class="actions">
-      <button type="button" class="secondary" id="id-clear-log">Clear log</button>
-      <button type="button" class="secondary" id="id-reboot" disabled>Reboot robot</button>
+      <button type="button" class="secondary" id="id-clear-log">Clear log</button>      
       <label class="dummy-check">
         <input type="checkbox" id="id-verbose" />
         Verbose serial log
