@@ -222,8 +222,10 @@ function renderEsp32Panel(root: HTMLElement): void {
     <p class="lead">
       Requires STM32 already programmed (USB-serial bridge). Select a
       <code>FULL-ESP32-*.bin</code> image, authorize the Thymio3 serial port
-      (USB <code>0x0617:0x000D</code>), then Program at 460800 baud / address 0x0.
-      After flashing, RTS is pulsed to reset the ESP32 via STM32 <code>ESP32_ENABLE</code>.
+      (USB <code>0x0617:0x000D</code>), then Program at 115200 baud / address 0x0.
+      After flashing, RTS is pulsed to reset the ESP32 via STM32 <code>ESP32_ENABLE</code>.<br/>
+      <b>If there are connection troubles, disconnect and reconnect USB cable. </b><br/>
+      For faster and robust ESP32 programming use the external flash_download_tool
     </p>
     <div id="fw-esp32"></div>
     <div class="device-row">

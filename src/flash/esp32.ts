@@ -12,7 +12,7 @@ import type { LogFn } from "./stm32";
  * uploaded stub would be wiped before the first flash block. Running the ROM
  * handshake at the target speed instead keeps the port open from start to end.
  */
-export const ESP_BAUDRATE = 460800;
+export const ESP_BAUDRATE = 115200;
 export const ESP_FLASH_ADDRESS = 0x0;
 
 function sleep(ms: number): Promise<void> {
