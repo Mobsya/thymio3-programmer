@@ -1,14 +1,14 @@
 {
   "stm32": [
     {
-      "name": "STM32-20260731-1b9bebc5.bin",
-      "url": "./firmware/STM32-20260731-1b9bebc5.bin"
+      "name": "STM32-20260820-6f62e092.bin",
+      "url": "./firmware/STM32-20260820-6f62e092.bin"
     }
   ],
   "esp32": [
     {
-      "name": "FULL-ESP32-20260806-cca0f970.bin",
-      "url": "./firmware/FULL-ESP32-20260806-cca0f970.bin"
+      "name": "FULL-ESP32-20260820-2e92760b-1.8.8.bin",
+      "url": "./firmware/FULL-ESP32-20260820-2e92760b-1.8.8.bin"
     }
   ]
 }

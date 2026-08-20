@@ -3,6 +3,7 @@ import { findAuthorizedThymio3Ports } from "../usb/esp32Detect";
 import {
   BAUD_RATE,
   BURN_TIMEOUT_MS,
+  CLOSE_DWELL_MS,
   CLOSE_GUARD_MS,
   CMD_GET_ENTRIES,
   CMD_GET_ID,
@@ -18,7 +19,8 @@ import {
   READY_PREFIX,
   READY_TERMINATOR,
   REOPEN_TIMEOUT_MS,
-  RESET_HOLD_MS,
+  LINE_EDGE_MS,
+  PORT_READY_MS,
   RESP_UNKNOWN,
   RETRY_PAUSE_MS,
   RX_MAX_BYTES,
@@ -33,6 +35,21 @@ import {
 
 export type EfuseSessionState = "closed" | "connecting" | "production";
 
+/**
+ * Reset sequence for the Thymio3 USB-CDC bridge, captured from a working manual
+ * run. Both lines move in the same control transfer, which is what makes this
+ * form shorter than driving them one at a time.
+ *
+ * The third step repeats the second verbatim. It is kept: what the bridge acts
+ * on is the control transfer, not the resulting level, so it must not be
+ * optimised away as a no-op.
+ */
+const RESET_SEQUENCE: ReadonlyArray<{ dataTerminalReady: boolean; requestToSend: boolean }> = [
+  { dataTerminalReady: true, requestToSend: true },
+  { dataTerminalReady: false, requestToSend: false },
+  { dataTerminalReady: false, requestToSend: false },
+];
+
 export interface EfuseSessionCallbacks {
   /** Human readable trace, routed to the panel log. */
   log: LogFn;
@@ -44,8 +61,8 @@ export interface EfuseSessionCallbacks {
  * One production-mode session over the Thymio3 USB-CDC bridge.
  *
  * The session owns the serial port for its whole lifetime: it opens it, resets
- * the ESP32 by the act of opening it, streams the magic sequence, and keeps the
- * port open for as long as production mode lasts. Nothing else in the app may
+ * the ESP32 over the modem control lines, streams the magic sequence, and keeps
+ * the port open for as long as production mode lasts. Nothing else in the app may
  * touch that port meanwhile, which is why the app locks the other tabs while a
  * session is not closed.
  */
@@ -56,6 +73,8 @@ export class EfuseSession {
   private writer: WritableStreamDefaultWriter<Uint8Array> | null = null;
   private reader: ReadableStreamDefaultReader<Uint8Array> | null = null;
   private readLoopDone: Promise<void> | null = null;
+  /** In flight reset pulse, awaited before tearing the port down. */
+  private resetPulse: Promise<void> | null = null;
 
   private readLoopStop = false;
   /** The USB bridge went away, typically on reset. */
@@ -165,7 +184,9 @@ export class EfuseSession {
       while (this.sessionActive && !this.abortEntry && !this.inProduction) {
         attempt++;
         this.setState("connecting", `waiting for robot \u00b7 try ${attempt}`);
-        this.log(`Attempt ${attempt}: reopening to reset, then streaming ${dumpBytes(MAGIC)}`);
+        this.log(
+          `Attempt ${attempt}: closing the port to reset, then streaming ${dumpBytes(MAGIC)}`,
+        );
 
         let frame: number[] | null = null;
         try {
@@ -197,6 +218,36 @@ export class EfuseSession {
   }
 
   /**
+   * Close the port the way the Close button does, and let the reset land.
+   *
+   * On Windows the robot reboots when the port is closed, not when it is
+   * opened: the CDC stack drops the control lines on close. The loop was not
+   * getting that reset for two reasons. On the first attempt nothing had been
+   * opened yet, so `close()` threw InvalidStateError straight into `guard()`
+   * and the robot never moved. On later attempts the port was reopened within
+   * a few tens of milliseconds, too fast for the reset to play out.
+   *
+   * So: make sure there is really something open to close, close it through the
+   * exact same path the button uses, and then stay closed for a while. The
+   * button leaves the port closed for as long as the operator takes, which is
+   * why its reset is always visible.
+   */
+  private async closeLikeButton(): Promise<void> {
+    if (this.port && !this.writer) {
+      // Nothing open yet: open so the close below is a real close.
+      try {
+        await this.openPort();
+      } catch (err) {
+        this.log(`Pre-close open failed: ${errMsg(err)}`);
+      }
+    }
+
+    await this.closePort();
+    this.port = null;
+    await sleep(CLOSE_DWELL_MS);
+  }
+
+  /**
    * One reset plus one magic streaming window.
    *
    * The reset is the open() itself: Chrome asserts DTR and RTS as part of
@@ -208,8 +259,7 @@ export class EfuseSession {
    * @returns the READY frame, or null on timeout.
    */
   private async tryEnterProduction(): Promise<number[] | null> {
-    await this.closePort();
-    this.port = null;
+    await this.closeLikeButton();
 
     const found = await this.waitForDevice(REOPEN_TIMEOUT_MS);
     if (!found) {
@@ -301,11 +351,58 @@ export class EfuseSession {
   // -------------------------------------------------------------------------
 
   /**
-   * Open the port and use the opening itself as the reset.
+   * Drive both modem control lines in a single control transfer.
    *
-   * While EN is held low the ESP32 sends nothing, which lets the freshly
-   * enumerated bridge settle before the boot burst hits it. The lines are then
-   * released with the read loop already in place, so no boot byte is lost.
+   * Failures are logged instead of swallowed: a setSignals() the bridge ignores
+   * is the difference between a robot that reboots and one that never enters
+   * production mode.
+   */
+  private async setLines(signals: SerialOutputSignals, label: string): Promise<void> {
+    const port = this.port;
+    if (!port) throw new Error("No serial port for signal control.");
+    try {
+      await port.setSignals(signals);
+      if (this.verbose) this.log(`${label}: ${JSON.stringify(signals)}`);
+    } catch (err) {
+      this.log(`${label}: setSignals failed (${errMsg(err)})`);
+      throw err;
+    }
+  }
+
+  /**
+   * Walk the reset sequence, one control transfer per step.
+   *
+   * The order is the one verified on the bench against a real robot and is
+   * reproduced verbatim, repeated steps included.
+   *
+   * The timings in the captured log were a second apart because the lines were
+   * driven by hand; only the order carries meaning, so the steps are spaced by
+   * LINE_EDGE_MS.
+   */
+  private async pulseReset(): Promise<void> {
+    try {
+      for (const step of RESET_SEQUENCE) {
+        await this.setLines(step, "Reset");
+        await sleep(LINE_EDGE_MS);
+      }
+    } catch {
+      // Already logged by setLines. The magic stream keeps running: closing and
+      // reopening the port resets the robot on its own on Windows.
+    }
+  }
+
+  /**
+   * Open the port and kick off the reset, without waiting for it.
+   *
+   * The magic sequence must start flowing immediately. Two things can reset the
+   * robot here and we do not control which one fires: the RTS pulse below, and
+   * the close/reopen of the port that precedes every attempt, which is itself a
+   * reset on Windows because the CDC stack drops the lines on close. Blocking
+   * the first magic burst behind the pulse meant that when the close had already
+   * rebooted the robot, its boot window was over before we said a word.
+   *
+   * Streaming magic into a chip that is still held in reset costs nothing: the
+   * burst repeats every MAGIC_BURST_MS for the whole window.
    */
   private async openPort(): Promise<void> {
     const port = this.port;
@@ -327,8 +424,10 @@ export class EfuseSession {
     this.deviceLost = false;
     this.startReadLoop();
 
-    await sleep(RESET_HOLD_MS);
-    await port.setSignals({ dataTerminalReady: false, requestToSend: false });
+    // Let the freshly opened endpoint settle: Windows can lose a control
+    // transfer issued in the same breath as the open.
+    await sleep(PORT_READY_MS);
+    this.resetPulse = this.pulseReset();
   }
 
   /**
@@ -395,6 +494,10 @@ export class EfuseSession {
 
   /** Tear the port down without ever blocking, even on a device that is gone. */
   private async closePort(): Promise<void> {
+    if (this.resetPulse) {
+      await guard(this.resetPulse);
+      this.resetPulse = null;
+    }
     this.readLoopStop = true;
     if (this.reader) await guard(this.reader.cancel());
     if (this.readLoopDone) {

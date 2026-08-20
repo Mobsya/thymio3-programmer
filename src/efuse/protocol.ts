@@ -31,12 +31,19 @@ export const MAGIC_WINDOW_MS = 4000;
 export const RETRY_PAUSE_MS = 500;
 /** Must be longer than PROD_SETTLE_MS on the robot. */
 export const SETTLE_MS = 350;
-/** Chip kept in reset after open(), to let the freshly enumerated bridge settle. */
-export const RESET_HOLD_MS = 150;
+/** Grace period after open() before the first control transfer goes out. */
+export const PORT_READY_MS = 20;
+/** Gap between two steps of the reset sequence, so each edge is its own event. */
+export const LINE_EDGE_MS = 100;
 /** How long we wait for the USB device to come back after a reset. */
 export const REOPEN_TIMEOUT_MS = 10000;
 /** Polling period while waiting for the device. */
 export const DEVICE_POLL_MS = 60;
+/**
+ * How long the port stays closed before being reopened. The close is what
+ * resets the robot on Windows, and the reset needs room to happen.
+ */
+export const CLOSE_DWELL_MS = 300;
 /** Cap on every close step: a lost device never answers. */
 export const CLOSE_GUARD_MS = 1500;
 /** Receive buffer cap while hunting for the READY frame. */
