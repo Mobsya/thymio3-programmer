@@ -618,7 +618,7 @@ function renderMarkup(root: HTMLElement): void {
       NUMBER is from 0 to 65535. <br/>
     </p>
     <div class="device-row">
-      <div id="device-id" class="device-status">No Thymio3 serial device (USB 0x0617:0x000D)</div>
+      <div id="device-id" class="device-status">No Thymio3 serial device (USB 0x39ff:0x0003)</div>
       <div id="id-session" class="device-status">port closed</div>
     </div>
     <div class="actions">
