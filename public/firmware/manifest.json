@@ -7,8 +7,8 @@
   ],
   "esp32": [
     {
-      "name": "FULL-ESP32-20260825-14cdb218-1.8.9.bin",
-      "url": "./firmware/FULL-ESP32-20260825-14cdb218-1.8.9.bin"
+      "name": "FULL-ESP32-20260827-0f0587b4-1.9.1.bin",
+      "url": "./firmware/FULL-ESP32-20260827-0f0587b4-1.9.1.bin"
     }
   ]
 }
